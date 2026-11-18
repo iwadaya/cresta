@@ -792,17 +792,20 @@ End Function
 ' Create the .accdb if needed, bring the schema up to date and, for a brand-new
 ' database, seed it from the reference sheets shipped in this workbook.
 Public Function SetupDatabase() As String
-    Dim path As String, existed As Boolean, cn As Object, m As String, seedMsg As String
+    Dim path As String, existed As Boolean, isNew As Boolean, cn As Object, m As String, seedMsg As String
     path = DbPath()
     existed = (Len(Dir$(path)) > 0)
     If Not existed Then AggDb.CreateDatabaseFile path
     On Error GoTo EH
     Set cn = AggDb.Connect()
+    ' "New" = no schema yet, so an empty .accdb made by hand in Access is treated
+    ' like one this macro created: the workbook's lists are pushed, not pulled over.
+    isNew = Not AggDb.ObjectExists(cn, "schema_migrations")
     m = AggMigrate.RunMigrations(cn)
     m = m & vbCrLf & AggSeed.EnsureReferenceData(cn)
     AggDb.CloseQuietly cn
     On Error GoTo 0
-    If Not existed Then
+    If isNew Then
         seedMsg = PushMasters()
         If Left$(seedMsg, 7) = "Nothing" Then
             SetupDatabase = "Database created at" & vbCrLf & path & vbCrLf & m & vbCrLf & vbCrLf & seedMsg

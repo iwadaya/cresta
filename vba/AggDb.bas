@@ -26,7 +26,7 @@ Private Function Providers() As Variant
 End Function
 
 Private Function ConnString(ByVal provider As String, ByVal path As String) As String
-    ConnString = "Provider=" & provider & ";Data Source=" & path & ";Persist Security Info=False;"
+    ConnString = "Provider=" & provider & ";Data Source=" & path & ";"
 End Function
 
 ' Open a connection to the tracker database.
@@ -66,14 +66,35 @@ Private Function OpenWithProvider(ByVal path As String) As Object
         "with the same bitness (32/64-bit) as Excel."
 End Function
 
-' Create an empty .accdb file.
+' Create an empty .accdb file. Tries DAO first (the engine Access itself uses),
+' then ADOX through each ACE provider. Reports every attempt if all fail.
 Public Sub CreateDatabaseFile(ByVal path As String)
-    Dim provs As Variant, i As Long, cat As Object, lastErr As String
+    Const dbVersion120 As Long = 128                 ' .accdb format
+    Const dbLangGeneral As String = ";LANGID=0x0409;CP=1252;COUNTRY=0"
+    Dim provs As Variant, i As Long, eng As Object, db As Object, cat As Object, errs As String
+
+    ' 1) DAO
+    On Error Resume Next
+    Set eng = CreateObject("DAO.DBEngine.120")
+    If Err.Number = 0 Then
+        Set db = eng.CreateDatabase(path, dbLangGeneral, dbVersion120)
+        If Err.Number = 0 Then
+            db.Close
+            On Error GoTo 0
+            Exit Sub
+        End If
+    End If
+    errs = "  DAO.DBEngine.120: " & Err.Description & vbCrLf
+    Err.Clear
+    On Error GoTo 0
+    DeletePartial path
+
+    ' 2) ADOX, plain connection string (extra properties cause "Multiple-step" errors)
     provs = Providers()
     For i = LBound(provs) To UBound(provs)
         Set cat = CreateObject("ADOX.Catalog")
         On Error Resume Next
-        cat.Create ConnString(CStr(provs(i)), path)
+        cat.Create "Provider=" & provs(i) & ";Data Source=" & path & ";"
         If Err.Number = 0 Then
             On Error GoTo 0
             mProvider = CStr(provs(i))
@@ -83,11 +104,21 @@ Public Sub CreateDatabaseFile(ByVal path As String)
             Set cat = Nothing
             Exit Sub
         End If
-        lastErr = Err.Description
+        errs = errs & "  ADOX " & provs(i) & ": " & Err.Description & vbCrLf
         Err.Clear
         On Error GoTo 0
+        Set cat = Nothing
+        DeletePartial path
     Next i
-    Err.Raise vbObjectError + 1103, APP_NAME, "Could not create " & path & vbCrLf & lastErr
+    Err.Raise vbObjectError + 1103, APP_NAME, "Could not create " & path & vbCrLf & vbCrLf & errs & vbCrLf & _
+        "Workaround: in Access create a Blank database with that name in that folder, close Access, " & _
+        "then run Setup again."
+End Sub
+
+Private Sub DeletePartial(ByVal path As String)
+    On Error Resume Next
+    If Len(Dir$(path)) > 0 Then Kill path
+    On Error GoTo 0
 End Sub
 
 Public Sub CloseQuietly(ByRef cn As Object)

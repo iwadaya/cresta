@@ -5,6 +5,10 @@ by cedant, country and CRESTA zone. It is laid out the same way as the Universe
 platform (screens → services → repositories → database, numbered migrations,
 optimistic locking, audit log), using only Excel and Access.
 
+## Download
+
+**[Aggregate_Tracker_Kit.zip](https://github.com/iwadaya/cresta/raw/main/Aggregate_Tracker_Kit.zip)**: everything below in one zip. After downloading, right-click it → Properties → **Unblock**, then extract.
+
 ## What's in the repo
 
 | Path | What it is |

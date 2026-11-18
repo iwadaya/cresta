@@ -37,9 +37,23 @@ your live data and stays on your machine or a network drive.
 
 1. **Pull everything from Access**.
 2. New cedant? Click **Add cedant**, or type rows on *Cedants* and **Push lists + cedants**.
-3. Enter aggregates on *Aggregates* (blue columns). To remove a saved row, type `X` in *Delete (X)*.
+3. Enter aggregates on *Aggregates* (blue columns): 100% amounts per peril plus our **Written line %** and
+   **Signed line %** for that row. To remove a saved row, type `X` in *Delete (X)*.
 4. **Push aggregates**. The push saves everything or nothing. Fix any rows marked `ERROR` in the Status column.
-5. Read *Dashboard*, *By Cedant*, *By Country* and *Matrix*, all in USD with a UW-year filter.
+5. Read the reports, all in USD with the UW-year filter on *Dashboard*:
+   *100% Share*, *Written Share*, *Signed Share* (each with a View by Cedant / Country switch),
+   *Factor Applied* (written and signed share x the factor in F4, default 0.35%), and *Matrix*
+   (cedant x country on any basis).
+
+## Written and signed lines
+
+Each aggregate row carries our written line and signed line (0-100%). Written share = 100% x written
+line; signed share = 100% x signed line. A push is refused if the signed line is above the written
+line. A blank line means "not known yet" and gives a share of 0; the Dashboard counts these rows.
+
+**Upgrading an existing database:** build the new `.xlsm`, keep it next to (or point Start!C7 at) the
+existing `AggregateTracker.accdb` and click **Setup** once. Migration `006_written_signed_lines` adds
+the two columns and the share views; your data is kept and pulled into the new workbook.
 
 ## Data model
 
@@ -62,7 +76,9 @@ the peak single-peril aggregate.
 | `audit_log` | `audit_log` |
 
 Saved queries in Access: `vw_aggregate_detail`, `vw_aggregate_usd`, `vw_agg_by_cedant`,
-`vw_agg_by_country`, `vw_agg_by_cedant_country`, `vw_agg_missing_fx`.
+`vw_agg_by_country`, `vw_agg_by_cedant_country`, `vw_agg_missing_fx`, and for our share
+`vw_aggregate_share_usd`, `vw_agg_share_by_cedant`, `vw_agg_share_by_country`,
+`vw_agg_share_by_cedant_country` (100%, written and signed USD per peril).
 
 To change the schema, add a new numbered migration in `AggMigrate.bas` and bump
 `MIG_COUNT`. Never edit an applied migration.

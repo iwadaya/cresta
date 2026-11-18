@@ -31,7 +31,7 @@ Public Const LAST_ROW_CTRY As Long = 205     ' 200 countries
 Public Const LAST_ROW_RATE As Long = 105     ' 100 currencies
 Public Const LAST_ROW_LIST As Long = 105     ' 100 treaty types / classes
 
-' --- Aggregates sheet columns (A..T are inputs / sync state; U.. are formulas) --
+' --- Aggregates sheet columns (A..V are inputs / sync state; W.. are formulas) --
 Public Const COL_STATUS As Long = 1
 Public Const COL_ID As Long = 2
 Public Const COL_CEDANT As Long = 3
@@ -43,16 +43,18 @@ Public Const COL_TREATY As Long = 8
 Public Const COL_COB As Long = 9
 Public Const COL_CCY As Long = 10
 Public Const COL_ASAT As Long = 11
-Public Const COL_EQ As Long = 12
-Public Const COL_WS As Long = 13
-Public Const COL_FLOOD As Long = 14
-Public Const COL_SRCC As Long = 15
-Public Const COL_OTHERS As Long = 16
-Public Const COL_NOTES As Long = 17
-Public Const COL_DELETE As Long = 18
-Public Const COL_VERSION As Long = 19
-Public Const COL_FP As Long = 20             ' fingerprint of values as last pulled
-Public Const AGG_INPUT_COLS As Long = 20
+Public Const COL_WRITTEN As Long = 12        ' our written line (0-100%)
+Public Const COL_SIGNED As Long = 13         ' our signed line (0-100%, <= written)
+Public Const COL_EQ As Long = 14
+Public Const COL_WS As Long = 15
+Public Const COL_FLOOD As Long = 16
+Public Const COL_SRCC As Long = 17
+Public Const COL_OTHERS As Long = 18
+Public Const COL_NOTES As Long = 19
+Public Const COL_DELETE As Long = 20
+Public Const COL_VERSION As Long = 21
+Public Const COL_FP As Long = 22             ' fingerprint of values as last pulled
+Public Const AGG_INPUT_COLS As Long = 22
 
 ' --- Master sheet columns -----------------------------------------------------
 ' Cedants:   A name | B home country | C active Y/N | D id | E status

@@ -21,6 +21,8 @@ Public Const R_FLOOD As Long = 11
 Public Const R_SRCC As Long = 12
 Public Const R_OTHERS As Long = 13
 Public Const R_NOTES As Long = 14
+Public Const R_WRITTEN As Long = 15
+Public Const R_SIGNED As Long = 16
 
 ' --- Lookups -----------------------------------------------------------------
 ' name (case-insensitive) -> id
@@ -66,10 +68,11 @@ End Function
 ' Column order matches the Aggregates sheet from COL_ID to COL_NOTES, then row_version.
 Public Function SelectAggregates(ByVal cn As Object) As Variant
     Dim s As String
-    s = "SELECT agg_id, cedant_name, country_name, zone_id, zone_name, uw_year, treaty_type_name, "
-    s = s & "cob_name, currency_code, as_at_date, eq_agg, ws_agg, flood_agg, srcc_agg, others_agg, "
-    s = s & "agg_notes, row_version FROM vw_aggregate_detail "
-    s = s & "ORDER BY cedant_name, country_name, uw_year, zone_id, treaty_type_name, cob_name, currency_code"
+    s = "SELECT d.agg_id, d.cedant_name, d.country_name, d.zone_id, d.zone_name, d.uw_year, d.treaty_type_name, "
+    s = s & "d.cob_name, d.currency_code, d.as_at_date, a.written_line, a.signed_line, "
+    s = s & "d.eq_agg, d.ws_agg, d.flood_agg, d.srcc_agg, d.others_agg, d.agg_notes, d.row_version "
+    s = s & "FROM vw_aggregate_detail AS d INNER JOIN cedant_aggregate AS a ON d.agg_id = a.agg_id "
+    s = s & "ORDER BY d.cedant_name, d.country_name, d.uw_year, d.zone_id, d.treaty_type_name, d.cob_name, d.currency_code"
     SelectAggregates = AggDb.QueryRows(cn, s)
 End Function
 
@@ -78,11 +81,11 @@ Public Function InsertAggregate(ByVal cn As Object, ByVal rec As Variant) As Lon
     ts = Now: who = Actor()
     s = "INSERT INTO cedant_aggregate (cedant_id, country_id, zone_id, zone_name, uw_year, treaty_type_id, "
     s = s & "cob_id, currency_code, as_at_date, eq_agg, ws_agg, flood_agg, srcc_agg, others_agg, agg_notes, "
-    s = s & "row_version, created_at, created_by, updated_at, updated_by) "
-    s = s & "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    s = s & "written_line, signed_line, row_version, created_at, created_by, updated_at, updated_by) "
+    s = s & "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     AggDb.ExecParams cn, s, rec(R_CEDANT), rec(R_COUNTRY), rec(R_ZONE), rec(R_ZONENAME), rec(R_UWYEAR), _
         rec(R_TREATY), rec(R_COB), rec(R_CCY), rec(R_ASAT), rec(R_EQ), rec(R_WS), rec(R_FLOOD), _
-        rec(R_SRCC), rec(R_OTHERS), rec(R_NOTES), 1&, ts, who, ts, who
+        rec(R_SRCC), rec(R_OTHERS), rec(R_NOTES), rec(R_WRITTEN), rec(R_SIGNED), 1&, ts, who, ts, who
     InsertAggregate = AggDb.LastId(cn)
 End Function
 
@@ -94,11 +97,13 @@ Public Function UpdateAggregate(ByVal cn As Object, ByVal aggId As Long, ByVal v
     s = "UPDATE cedant_aggregate SET cedant_id = ?, country_id = ?, zone_id = ?, zone_name = ?, "
     s = s & "uw_year = ?, treaty_type_id = ?, cob_id = ?, currency_code = ?, as_at_date = ?, "
     s = s & "eq_agg = ?, ws_agg = ?, flood_agg = ?, srcc_agg = ?, others_agg = ?, agg_notes = ?, "
+    s = s & "written_line = ?, signed_line = ?, "
     s = s & "row_version = row_version + 1, updated_at = ?, updated_by = ? "
     s = s & "WHERE agg_id = ? AND row_version = ?"
     UpdateAggregate = AggDb.ExecParams(cn, s, rec(R_CEDANT), rec(R_COUNTRY), rec(R_ZONE), rec(R_ZONENAME), _
         rec(R_UWYEAR), rec(R_TREATY), rec(R_COB), rec(R_CCY), rec(R_ASAT), rec(R_EQ), rec(R_WS), _
-        rec(R_FLOOD), rec(R_SRCC), rec(R_OTHERS), rec(R_NOTES), Now, Actor(), aggId, version)
+        rec(R_FLOOD), rec(R_SRCC), rec(R_OTHERS), rec(R_NOTES), rec(R_WRITTEN), rec(R_SIGNED), _
+        Now, Actor(), aggId, version)
 End Function
 
 Public Function DeleteAggregate(ByVal cn As Object, ByVal aggId As Long, ByVal version As Long) As Long

@@ -7,7 +7,7 @@ Attribute VB_Name = "AggMigrate"
 '===============================================================================
 Option Explicit
 
-Public Const MIG_COUNT As Long = 5
+Public Const MIG_COUNT As Long = 6
 
 Private Function MigrationName(ByVal v As Long) As String
     Select Case v
@@ -16,6 +16,7 @@ Private Function MigrationName(ByVal v As Long) As String
         Case 3: MigrationName = "003_cedant_aggregates"
         Case 4: MigrationName = "004_reporting_views"
         Case 5: MigrationName = "005_seed_unspecified"
+        Case 6: MigrationName = "006_written_signed_lines"
     End Select
 End Function
 
@@ -162,8 +163,46 @@ Private Function MigrationSql(ByVal v As Long) As Collection
 
     Case 5
         ' data seed, handled in ApplySeed
+
+    Case 6 ' --- our written / signed line per aggregate row + share reporting views
+        ' Fractions (7.5% = 0.075); NULL = not known yet. Signed <= written is checked in AggService.
+        c.Add "ALTER TABLE cedant_aggregate ADD COLUMN written_line DOUBLE"
+        c.Add "ALTER TABLE cedant_aggregate ADD COLUMN signed_line DOUBLE"
+
+        s = "CREATE VIEW vw_aggregate_share_usd AS SELECT u.agg_id, u.cedant_name, u.country_name, u.country_code, "
+        s = s & "u.region, u.zone_id, u.uw_year, u.treaty_type_name, u.cob_name, u.currency_code, u.rate_to_usd, "
+        s = s & "a.written_line, a.signed_line, "
+        s = s & "u.eq_usd, u.ws_usd, u.flood_usd, u.srcc_usd, u.others_usd, "
+        s = s & "u.eq_usd * IIf(a.written_line Is Null, 0, a.written_line) AS eq_written_usd, "
+        s = s & "u.ws_usd * IIf(a.written_line Is Null, 0, a.written_line) AS ws_written_usd, "
+        s = s & "u.flood_usd * IIf(a.written_line Is Null, 0, a.written_line) AS flood_written_usd, "
+        s = s & "u.srcc_usd * IIf(a.written_line Is Null, 0, a.written_line) AS srcc_written_usd, "
+        s = s & "u.others_usd * IIf(a.written_line Is Null, 0, a.written_line) AS others_written_usd, "
+        s = s & "u.eq_usd * IIf(a.signed_line Is Null, 0, a.signed_line) AS eq_signed_usd, "
+        s = s & "u.ws_usd * IIf(a.signed_line Is Null, 0, a.signed_line) AS ws_signed_usd, "
+        s = s & "u.flood_usd * IIf(a.signed_line Is Null, 0, a.signed_line) AS flood_signed_usd, "
+        s = s & "u.srcc_usd * IIf(a.signed_line Is Null, 0, a.signed_line) AS srcc_signed_usd, "
+        s = s & "u.others_usd * IIf(a.signed_line Is Null, 0, a.signed_line) AS others_signed_usd "
+        s = s & "FROM vw_aggregate_usd AS u INNER JOIN cedant_aggregate AS a ON u.agg_id = a.agg_id"
+        c.Add s
+
+        c.Add ShareGroupView("vw_agg_share_by_cedant", "cedant_name")
+        c.Add ShareGroupView("vw_agg_share_by_country", "country_name, region")
+        c.Add ShareGroupView("vw_agg_share_by_cedant_country", "cedant_name, country_name")
     End Select
     Set MigrationSql = c
+End Function
+
+' Grouped view over vw_aggregate_share_usd: 100%, written and signed USD per peril.
+Private Function ShareGroupView(ByVal viewName As String, ByVal groupCols As String) As String
+    Dim s As String, p As Variant
+    s = "CREATE VIEW " & viewName & " AS SELECT " & groupCols & ", uw_year, COUNT(*) AS row_count"
+    For Each p In Array("eq", "ws", "flood", "srcc", "others")
+        s = s & ", SUM(" & p & "_usd) AS " & p & "_100_usd"
+        s = s & ", SUM(" & p & "_written_usd) AS " & p & "_written_usd"
+        s = s & ", SUM(" & p & "_signed_usd) AS " & p & "_signed_usd"
+    Next p
+    ShareGroupView = s & " FROM vw_aggregate_share_usd GROUP BY " & groupCols & ", uw_year"
 End Function
 
 ' "ALL" rows so blank treaty type / class on the sheet always resolves to an id.

@@ -74,6 +74,8 @@ Public Function Fingerprint(ByVal vals As Variant, ByVal i As Long) As String
                 If IsDate(v) And Not IsBlankV(v) Then parts(c) = Format$(CDate(v), "yyyy-mm-dd") Else parts(c) = Txt(v)
             Case COL_EQ, COL_WS, COL_FLOOD, COL_SRCC, COL_OTHERS
                 parts(c) = NumText(v)
+            Case COL_WRITTEN, COL_SIGNED                ' blank stays blank (not the same as 0%)
+                If IsBlankV(v) Then parts(c) = "" Else parts(c) = NumText(v)
             Case Else
                 parts(c) = Txt(v)
         End Select
@@ -96,7 +98,7 @@ Private Function ValidateAggRow(ByVal vals As Variant, ByVal i As Long, ByVal ce
         ByVal ctry As Object, ByVal tt As Object, ByVal cob As Object, ByVal ccy As Object, _
         ByRef rec As Variant) As String
     Dim c As Long, s As String, v As Variant, amt As Variant, cols As Variant, k As Long
-    Dim r(0 To 14) As Variant
+    Dim r(0 To 16) As Variant
 
     For c = COL_CEDANT To COL_NOTES
         If IsError(vals(i, c)) Then
@@ -167,6 +169,27 @@ Private Function ValidateAggRow(ByVal vals As Variant, ByVal i As Long, ByVal ce
         End If
     Next k
 
+    ' Our lines: stored as fractions (7.5% = 0.075). Blank = not known yet.
+    For k = 0 To 1
+        v = vals(i, Choose(k + 1, COL_WRITTEN, COL_SIGNED))
+        If IsBlankV(v) Then
+            r(AggRepo.R_WRITTEN + k) = Null
+        ElseIf IsNumeric(v) And VarType(v) <> vbBoolean Then
+            If CDbl(v) < 0 Or CDbl(v) > 1 Then
+                ValidateAggRow = Choose(k + 1, "Written", "Signed") & " line must be between 0% and 100%": Exit Function
+            End If
+            r(AggRepo.R_WRITTEN + k) = CDbl(v)
+        Else
+            ValidateAggRow = Choose(k + 1, "Written", "Signed") & " line must be a percentage, e.g. 7.5%": Exit Function
+        End If
+    Next k
+    If Not IsNull(r(AggRepo.R_WRITTEN)) And Not IsNull(r(AggRepo.R_SIGNED)) Then
+        If r(AggRepo.R_SIGNED) > r(AggRepo.R_WRITTEN) + 0.000000001 Then
+            ValidateAggRow = "Signed line (" & Format$(r(AggRepo.R_SIGNED), "0.00%") & ") cannot be above the written line (" & _
+                Format$(r(AggRepo.R_WRITTEN), "0.00%") & ")": Exit Function
+        End If
+    End If
+
     s = Txt(vals(i, COL_NOTES))
     r(AggRepo.R_NOTES) = NullIfBlank(Left$(s, 255))
     rec = r
@@ -205,6 +228,7 @@ End Function
 
 Private Function WriteAggregates(ByVal rows As Variant) As Long
     Dim ws As Worksheet, nr As Long, r As Long, c As Long, out() As Variant, vals As Variant, fp() As Variant
+    Dim nData As Long
     Set ws = Sh(SH_AGG)
     ws.Range(ws.Cells(FIRST_ROW, 1), ws.Cells(LAST_ROW_AGG, AGG_INPUT_COLS)).ClearContents
     If Not IsArray(rows) Then Exit Function
@@ -213,13 +237,14 @@ Private Function WriteAggregates(ByVal rows As Variant) As Long
         Err.Raise vbObjectError + 1301, APP_NAME, "Access holds " & nr & " aggregate rows but the sheet holds " & _
             (LAST_ROW_AGG - FIRST_ROW + 1) & ". Report from the Access views (vw_agg_*) or extend the sheet."
     End If
+    nData = COL_NOTES - COL_ID + 1            ' agg_id .. agg_notes  ->  B .. S
     ReDim out(1 To nr, 1 To AGG_INPUT_COLS)
     For r = 1 To nr
         out(r, COL_STATUS) = "OK"
-        For c = 1 To 16                       ' agg_id .. agg_notes  ->  B .. Q
+        For c = 1 To nData
             out(r, COL_ID + c - 1) = rows(r, c)
         Next c
-        out(r, COL_VERSION) = rows(r, 17)
+        out(r, COL_VERSION) = rows(r, nData + 1)
     Next r
     ws.Range(ws.Cells(FIRST_ROW, 1), ws.Cells(FIRST_ROW + nr - 1, AGG_INPUT_COLS)).Value = out
 

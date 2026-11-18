@@ -2,7 +2,8 @@
 
 Layout contract with the VBA modules (AggConfig.bas):
   header row 5, data from row 6 on every grid sheet;
-  Aggregates A..T = inputs + sync state, U..Z = formulas.
+  Aggregates A..V = inputs + sync state (L/M = written/signed line),
+  W = FX, X..AB = 100% USD, AC..AG = written share USD, AH..AL = signed share USD.
 """
 import sys
 from datetime import date
@@ -22,9 +23,23 @@ FONT = "Arial"
 MONEY = '#,##0;[Red]-#,##0;"-"'
 RATE = '#,##0.000000'
 DATE = 'dd-mmm-yyyy'
+PCT = '0.00%'
 STAMP = 'dd-mmm-yyyy hh:mm'
 
 FIRST, LAST_AGG, LAST_CED, LAST_CTRY, LAST_RATE, LAST_LIST = 6, 5005, 505, 205, 105, 105
+
+# Aggregates calculated columns (must match vba/AggConfig.bas: inputs end at V)
+USD_100 = ["X", "Y", "Z", "AA", "AB"]
+USD_WRITTEN = ["AC", "AD", "AE", "AF", "AG"]
+USD_SIGNED = ["AH", "AI", "AJ", "AK", "AL"]
+AG_NCOL = 38
+USD_COLS = {"100": USD_100, "written": USD_WRITTEN, "signed": USD_SIGNED}
+# (sheet name, description, column block)
+BASES = [("100% Share", "100% of the cedant's aggregate", "100"),
+         ("Written Share", "our written share (100% x written line)", "written"),
+         ("Signed Share", "our signed share (100% x signed line)", "signed")]
+DEFAULT_FACTOR = 0.0035     # 0.35% - given by the user
+BASIS_LIST = ["100% share", "Written share", "Signed share", "Written x factor", "Signed x factor"]
 
 thin = Side(style="thin", color=GRID)
 BOX = Border(top=thin, left=thin, bottom=thin, right=thin)
@@ -181,27 +196,27 @@ UNIVERSE_CEDANTS = [
 DEMO_CEDANTS = [('Demo - Alpha Insurance','Saudi Arabia'),('Demo - Baobab General','Zambia'),
                 ('Demo - Crescent Takaful','United Arab Emirates'),('Demo - Delta Re-Assurance','Kenya'),
                 ('Demo - Gulf Pearl Insurance','Bahrain')]
-# cedant, country, zone, zone name, year, treaty, class, ccy, EQ, WS, Flood, SRCC, Others
+# cedant, country, zone, zone name, year, treaty, class, ccy, written line, signed line, EQ, WS, Flood, SRCC, Others
 DEMO_ROWS = [
-    ('Demo - Alpha Insurance','Saudi Arabia','SA-01','Riyadh',2026,'Quota Share','Property','SAR',450e6,0,120e6,80e6,0),
-    ('Demo - Alpha Insurance','Saudi Arabia','SA-02','Makkah',2026,'Quota Share','Property','SAR',380e6,0,210e6,60e6,0),
-    ('Demo - Alpha Insurance','Saudi Arabia','SA-03','Eastern Province',2026,'CAT XL','Property','SAR',300e6,90e6,150e6,40e6,0),
-    ('Demo - Alpha Insurance','United Arab Emirates','','',2026,'Quota Share','Engineering','AED',75e6,40e6,25e6,10e6,5e6),
-    ('Demo - Alpha Insurance','Saudi Arabia','SA-01','Riyadh',2025,'Quota Share','Property','SAR',400e6,0,100e6,70e6,0),
-    ('Demo - Baobab General','Zambia','','',2026,'Quota Share','Property','USD',12e6,0,8e6,6e6,1e6),
-    ('Demo - Baobab General','Zimbabwe','','',2026,'Quota Share','Property','USD',9e6,0,5e6,7e6,0),
-    ('Demo - Baobab General','Zambia','','',2025,'First Surplus','Property','USD',10e6,0,7e6,5e6,0),
-    ('Demo - Crescent Takaful','United Arab Emirates','AE-DXB','Dubai',2026,'Quota Share','Property','AED',520e6,310e6,190e6,45e6,0),
-    ('Demo - Crescent Takaful','United Arab Emirates','AE-AUH','Abu Dhabi',2026,'Quota Share','Property','AED',340e6,200e6,110e6,30e6,0),
-    ('Demo - Crescent Takaful','Oman','','',2026,'Risk & CAT XL','Property','OMR',18e6,22e6,15e6,3e6,0),
-    ('Demo - Crescent Takaful','Qatar','','',2026,'Quota Share','Energy','QAR',95e6,60e6,20e6,12e6,0),
-    ('Demo - Delta Re-Assurance','Kenya','KE-NBO','Nairobi',2026,'Quota Share','Property','KES',2.5e9,0,1.2e9,0.9e9,0),
-    ('Demo - Delta Re-Assurance','Tanzania','','',2026,'Quota Share','Property','USD',14e6,3e6,9e6,4e6,0),
-    ('Demo - Delta Re-Assurance','Uganda','','',2026,'Quota Share','Agriculture','USD',0,0,6e6,0,4e6),
-    ('Demo - Gulf Pearl Insurance','Bahrain','','',2026,'Quota Share','Property','BHD',60e6,15e6,25e6,20e6,0),
-    ('Demo - Gulf Pearl Insurance','Saudi Arabia','SA-03','Eastern Province',2026,'Quota Share','Property','SAR',150e6,30e6,90e6,25e6,0),
-    ('Demo - Gulf Pearl Insurance','Kuwait','','',2026,'Fac Oblig','Property','USD',35e6,8e6,12e6,15e6,0),
-    ('Demo - Gulf Pearl Insurance','Jordan','','',2025,'Quota Share','Property','JOD',40e6,0,6e6,9e6,0),
+    ('Demo - Alpha Insurance','Saudi Arabia','SA-01','Riyadh',2026,'Quota Share','Property','SAR',0.1,0.08,450e6,0,120e6,80e6,0),
+    ('Demo - Alpha Insurance','Saudi Arabia','SA-02','Makkah',2026,'Quota Share','Property','SAR',0.1,0.08,380e6,0,210e6,60e6,0),
+    ('Demo - Alpha Insurance','Saudi Arabia','SA-03','Eastern Province',2026,'CAT XL','Property','SAR',0.15,0.125,300e6,90e6,150e6,40e6,0),
+    ('Demo - Alpha Insurance','United Arab Emirates','','',2026,'Quota Share','Engineering','AED',0.05,0.05,75e6,40e6,25e6,10e6,5e6),
+    ('Demo - Alpha Insurance','Saudi Arabia','SA-01','Riyadh',2025,'Quota Share','Property','SAR',0.1,0.1,400e6,0,100e6,70e6,0),
+    ('Demo - Baobab General','Zambia','','',2026,'Quota Share','Property','USD',0.2,0.2,12e6,0,8e6,6e6,1e6),
+    ('Demo - Baobab General','Zimbabwe','','',2026,'Quota Share','Property','USD',0.2,0.15,9e6,0,5e6,7e6,0),
+    ('Demo - Baobab General','Zambia','','',2025,'First Surplus','Property','USD',0.25,0.25,10e6,0,7e6,5e6,0),
+    ('Demo - Crescent Takaful','United Arab Emirates','AE-DXB','Dubai',2026,'Quota Share','Property','AED',0.075,0.075,520e6,310e6,190e6,45e6,0),
+    ('Demo - Crescent Takaful','United Arab Emirates','AE-AUH','Abu Dhabi',2026,'Quota Share','Property','AED',0.075,0.075,340e6,200e6,110e6,30e6,0),
+    ('Demo - Crescent Takaful','Oman','','',2026,'Risk & CAT XL','Property','OMR',0.1,None,18e6,22e6,15e6,3e6,0),
+    ('Demo - Crescent Takaful','Qatar','','',2026,'Quota Share','Energy','QAR',0.05,0.04,95e6,60e6,20e6,12e6,0),
+    ('Demo - Delta Re-Assurance','Kenya','KE-NBO','Nairobi',2026,'Quota Share','Property','KES',0.15,0.12,2.5e9,0,1.2e9,0.9e9,0),
+    ('Demo - Delta Re-Assurance','Tanzania','','',2026,'Quota Share','Property','USD',0.15,0.15,14e6,3e6,9e6,4e6,0),
+    ('Demo - Delta Re-Assurance','Uganda','','',2026,'Quota Share','Agriculture','USD',0.1,0.1,0,0,6e6,0,4e6),
+    ('Demo - Gulf Pearl Insurance','Bahrain','','',2026,'Quota Share','Property','BHD',0.125,0.1,60e6,15e6,25e6,20e6,0),
+    ('Demo - Gulf Pearl Insurance','Saudi Arabia','SA-03','Eastern Province',2026,'Quota Share','Property','SAR',0.125,0.1,150e6,30e6,90e6,25e6,0),
+    ('Demo - Gulf Pearl Insurance','Kuwait','','',2026,'Fac Oblig','Property','USD',0.2,0.2,35e6,8e6,12e6,15e6,0),
+    ('Demo - Gulf Pearl Insurance','Jordan','','',2025,'Quota Share','Property','JOD',0.1,0.1,40e6,0,6e6,9e6,0),
 ]
 
 
@@ -210,25 +225,28 @@ def build(path, demo=False):
     st = wb.active
     st.title = "Start"
     dash = wb.create_sheet("Dashboard")
-    byc = wb.create_sheet("By Cedant")
-    byk = wb.create_sheet("By Country")
+    basis_ws = [wb.create_sheet(nm) for nm, _, _ in BASES]
+    fac = wb.create_sheet("Factor Applied")
     mx = wb.create_sheet("Matrix")
     ag = wb.create_sheet("Aggregates")
     ce = wb.create_sheet("Cedants")
     co = wb.create_sheet("Countries")
     ra = wb.create_sheet("Rates")
     li = wb.create_sheet("Lists")
+    calc = wb.create_sheet("Calc")
+    report_tabs = {"Start", "Dashboard", "Factor Applied", "Matrix"} | {nm for nm, _, _ in BASES}
     for ws in wb.worksheets:
         ws.sheet_view.showGridLines = False
-        ws.sheet_properties.tabColor = HEADER if ws.title in ("Start", "Dashboard", "By Cedant", "By Country", "Matrix") else TEAL
+        ws.sheet_properties.tabColor = HEADER if ws.title in report_tabs else TEAL
 
     # ---------------- defined names ---------------------------------------------
     rng = lambda col: f"Aggregates!${col}${FIRST}:${col}${LAST_AGG}"
     for nm, col in [("agg_Status", "A"), ("agg_Cedant", "C"), ("agg_Country", "D"), ("agg_UWYear", "G"),
-                    ("agg_Ccy", "J"), ("agg_Delete", "R"), ("agg_FX", "U"), ("agg_EQ_USD", "V"),
-                    ("agg_WS_USD", "W"), ("agg_Flood_USD", "X"), ("agg_SRCC_USD", "Y"), ("agg_Others_USD", "Z")]:
+                    ("agg_Ccy", "J"), ("agg_Written", "L"), ("agg_Signed", "M"), ("agg_Delete", "T"),
+                    ("agg_FX", "W")]:
         name(wb, nm, rng(col))
-    name(wb, "agg_USD_block", f"Aggregates!$V${FIRST}:$Z${LAST_AGG}")
+    # 15 USD columns: 100% (X:AB), written share (AC:AG), signed share (AH:AL); 5 perils each
+    name(wb, "agg_USD_block", f"Aggregates!$X${FIRST}:$AL${LAST_AGG}")
     name(wb, "lst_Cedants", f"OFFSET(Cedants!$A${FIRST},0,0,MAX(1,COUNTA(Cedants!$A${FIRST}:$A${LAST_CED})),1)")
     name(wb, "lst_Countries", f"OFFSET(Countries!$A${FIRST},0,0,MAX(1,COUNTA(Countries!$A${FIRST}:$A${LAST_CTRY})),1)")
     name(wb, "lst_Ccy", f"OFFSET(Rates!$A${FIRST},0,0,MAX(1,COUNTA(Rates!$A${FIRST}:$A${LAST_RATE})),1)")
@@ -236,61 +254,86 @@ def build(path, demo=False):
     name(wb, "lst_Cob", f"OFFSET(Lists!$D${FIRST},0,0,MAX(1,COUNTA(Lists!$D${FIRST}:$D${LAST_LIST})),1)")
     name(wb, "lst_Perils", "Lists!$G$6:$G$10")
     name(wb, "lst_UWYears", "Lists!$J$6:$J$27")
+    name(wb, "lst_Basis", "Lists!$M$6:$M$10")
+    name(wb, "lst_ViewBy", "Lists!$O$6:$O$7")
     name(wb, "cfg_DbPath", "Start!$C$7")
     name(wb, "cfg_LastPull", "Start!$C$9")
     name(wb, "cfg_LastPush", "Start!$C$10")
+    name(wb, "cfg_Factor", "'Factor Applied'!$F$4")
     name(wb, "sel_UWYear", "Dashboard!$C$5")
     name(wb, "crit_UWYear", 'IF(Dashboard!$C$5="All",">0",Dashboard!$C$5)')
-    name(wb, "sel_PerilIdx", "MATCH(Matrix!$C$5,Lists!$G$6:$G$10,0)")
+    name(wb, "sel_MxBasis", "MATCH(Matrix!$C$4,Lists!$M$6:$M$10,0)")
+    name(wb, "sel_MxCol", "CHOOSE(MATCH(Matrix!$C$4,Lists!$M$6:$M$10,0),0,5,10,5,10)+MATCH(Matrix!$C$5,Lists!$G$6:$G$10,0)")
+    name(wb, "sel_MxMult", "IF(MATCH(Matrix!$C$4,Lists!$M$6:$M$10,0)>3,'Factor Applied'!$F$4,1)")
 
     # ================= Aggregates ===============================================
-    ncol = 26
+    ncol = AG_NCOL
     title_bar(ag, ncol, "Aggregates by cedant / country",
               "Working copy of the Access table cedant_aggregate. Enter in blue columns, then Push to Access. "
-              "Amounts in original currency, one column per peril (perils are not additive). Type X in 'Delete' to remove a saved row.")
+              "Amounts are 100% in original currency, one column per peril (perils are not additive). "
+              "Written and signed lines turn them into our share. Type X in 'Delete' to remove a saved row.")
     labels = ["Status", "ID", "Cedant", "Country", "CRESTA zone ID", "Zone name", "UW year", "Treaty type",
-              "Class of business", "Currency", "As-at date", "EQ", "WS", "Flood", "SRCC", "Others", "Notes",
-              "Delete (X)", "row_version", "_fp", "FX (USD per 1)", "EQ (USD)", "WS (USD)", "Flood (USD)",
-              "SRCC (USD)", "Others (USD)"]
+              "Class of business", "Currency", "As-at date", "Written line %", "Signed line %",
+              "EQ (100%)", "WS (100%)", "Flood (100%)", "SRCC (100%)", "Others (100%)", "Notes",
+              "Delete (X)", "row_version", "_fp", "FX (USD per 1)"]
+    labels += [f"{p} 100% USD" for p, _ in PERILS]
+    labels += [f"{p} written USD" for p, _ in PERILS]
+    labels += [f"{p} signed USD" for p, _ in PERILS]
     header(ag, 5, labels)
-    for c in range(21, 27):
+    for c in range(23, ncol + 1):
         ag.cell(5, c).fill = fill(TEAL)
+    for c in (12, 13):
+        ag.cell(5, c).fill = fill("2F6F8F")
     ag.cell(4, 1, "Sync state").font = f(8, True, INK_SOFT)
     ag.cell(4, 3, "Inputs (blue) - blank zone / treaty type / class = ALL").font = f(8, True, INK_SOFT)
-    ag.cell(4, 21, "Calculated - do not type here").font = f(8, True, INK_SOFT)
-    widths(ag, {"A": 26, "B": 7, "C": 28, "D": 22, "E": 12, "F": 18, "G": 8, "H": 18, "I": 18, "J": 9,
-                "K": 12, "L": 15, "M": 15, "N": 15, "O": 15, "P": 15, "Q": 24, "R": 8, "S": 8, "T": 8,
-                "U": 12, "V": 15, "W": 15, "X": 15, "Y": 15, "Z": 15})
-    ag.column_dimensions["S"].hidden = True
-    ag.column_dimensions["T"].hidden = True
+    ag.cell(4, 12, "Our lines on this treaty").font = f(8, True, INK_SOFT)
+    ag.cell(4, 23, "Calculated - do not type here").font = f(8, True, INK_SOFT)
+    w = {"A": 26, "B": 7, "C": 28, "D": 22, "E": 12, "F": 18, "G": 8, "H": 18, "I": 18, "J": 9,
+         "K": 12, "L": 10, "M": 10, "N": 15, "O": 15, "P": 15, "Q": 15, "R": 15, "S": 24, "T": 8,
+         "U": 8, "V": 8, "W": 12}
+    for c in range(24, ncol + 1):
+        w[L(c)] = 14
+    widths(ag, w)
+    ag.column_dimensions["U"].hidden = True
+    ag.column_dimensions["V"].hidden = True
     blue = f(10, color=INPUT_BLUE)
     style_range(ag, f"A{FIRST}:A{LAST_AGG}", font=f(9, color=INK_SOFT), border=False)
     style_range(ag, f"B{FIRST}:B{LAST_AGG}", font=f(9, color=INK_SOFT), number_format="0", border=False)
-    style_range(ag, f"C{FIRST}:R{LAST_AGG}", font=blue, border=False)
+    style_range(ag, f"C{FIRST}:T{LAST_AGG}", font=blue, border=False)
     style_range(ag, f"E{FIRST}:E{LAST_AGG}", number_format="@", border=False)
     style_range(ag, f"G{FIRST}:G{LAST_AGG}", number_format="0", border=False)
     style_range(ag, f"K{FIRST}:K{LAST_AGG}", number_format=DATE, border=False)
-    style_range(ag, f"L{FIRST}:P{LAST_AGG}", number_format=MONEY, border=False)
-    style_range(ag, f"R{FIRST}:R{LAST_AGG}", align=Alignment(horizontal="center"), border=False)
+    style_range(ag, f"L{FIRST}:M{LAST_AGG}", number_format=PCT, border=False)
+    style_range(ag, f"N{FIRST}:R{LAST_AGG}", number_format=MONEY, border=False)
+    style_range(ag, f"T{FIRST}:T{LAST_AGG}", align=Alignment(horizontal="center"), border=False)
+    c100, cwr, csg = USD_100, USD_WRITTEN, USD_SIGNED
     for r in range(FIRST, LAST_AGG + 1):
-        ag[f"U{r}"] = (f'=IF(OR($C{r}="",$J{r}="",UPPER($R{r})="X"),"",IFERROR(IF(VLOOKUP($J{r},Rates!$A${FIRST}:$C${LAST_RATE},3,FALSE)>0,'
+        ag[f"W{r}"] = (f'=IF(OR($C{r}="",$J{r}="",UPPER($T{r})="X"),"",IFERROR(IF(VLOOKUP($J{r},Rates!$A${FIRST}:$C${LAST_RATE},3,FALSE)>0,'
                        f'VLOOKUP($J{r},Rates!$A${FIRST}:$C${LAST_RATE},3,FALSE),""),""))')
-        for col, src in zip("VWXYZ", "LMNOP"):
-            ag[f"{col}{r}"] = f'=IF($U{r}="",0,N({src}{r})*$U{r})'
-    style_range(ag, f"U{FIRST}:U{LAST_AGG}", font=f(9), number_format=RATE, bg=CALC_BG, border=False)
-    style_range(ag, f"V{FIRST}:Z{LAST_AGG}", font=f(10), number_format=MONEY, bg=CALC_BG, border=False)
+        for k, src in enumerate("NOPQR"):
+            ag[f"{c100[k]}{r}"] = f'=IF($W{r}="",0,N({src}{r})*$W{r})'
+            ag[f"{cwr[k]}{r}"] = f'={c100[k]}{r}*N($L{r})'
+            ag[f"{csg[k]}{r}"] = f'={c100[k]}{r}*N($M{r})'
+    style_range(ag, f"W{FIRST}:W{LAST_AGG}", font=f(9), number_format=RATE, bg=CALC_BG, border=False)
+    style_range(ag, f"X{FIRST}:{L(ncol)}{LAST_AGG}", font=f(10), number_format=MONEY, bg=CALC_BG, border=False)
     ag.freeze_panes = "E6"
-    ag.auto_filter.ref = f"A5:Z{LAST_AGG}"
+    ag.auto_filter.ref = f"A5:{L(ncol)}{LAST_AGG}"
     data_ref = f"A{FIRST}:A{LAST_AGG}"
     ag.conditional_formatting.add(data_ref, FormulaRule(formula=[f'LEFT($A{FIRST},5)="ERROR"'],
                                   fill=fill("F8D7DA"), font=Font(name=FONT, color="9C0006", bold=True)))
     ag.conditional_formatting.add(data_ref, FormulaRule(formula=[f'OR(LEFT($A{FIRST},3)="NOT",LEFT($A{FIRST},4)="SKIP")'],
                                   fill=fill("FFF3CD"), font=Font(name=FONT, color="7A5B00")))
     ag.conditional_formatting.add(data_ref, FormulaRule(formula=[f'$A{FIRST}="OK"'], font=Font(name=FONT, color="2F8F6B")))
-    ag.conditional_formatting.add(f"C{FIRST}:Z{LAST_AGG}", FormulaRule(formula=[f'UPPER($R{FIRST})="X"'],
+    ag.conditional_formatting.add(f"C{FIRST}:{L(ncol)}{LAST_AGG}", FormulaRule(formula=[f'UPPER($T{FIRST})="X"'],
                                   font=Font(name=FONT, strike=True, color="999999")))
-    ag.conditional_formatting.add(f"U{FIRST}:U{LAST_AGG}", FormulaRule(formula=[f'AND($C{FIRST}<>"",$J{FIRST}<>"",$U{FIRST}="",UPPER($R{FIRST})<>"X")'],
+    ag.conditional_formatting.add(f"W{FIRST}:W{LAST_AGG}", FormulaRule(formula=[f'AND($C{FIRST}<>"",$J{FIRST}<>"",$W{FIRST}="",UPPER($T{FIRST})<>"X")'],
                                   fill=fill("FFF3CD")))
+    # missing line (amber) and signed > written (red)
+    ag.conditional_formatting.add(f"L{FIRST}:M{LAST_AGG}", FormulaRule(
+        formula=[f'AND($C{FIRST}<>"",UPPER($T{FIRST})<>"X",ISNUMBER($L{FIRST}),ISNUMBER($M{FIRST}),$M{FIRST}>$L{FIRST})'],
+        fill=fill("F8D7DA"), font=Font(name=FONT, color="9C0006", bold=True)))
+    ag.conditional_formatting.add(f"L{FIRST}:M{LAST_AGG}", FormulaRule(
+        formula=[f'AND($C{FIRST}<>"",UPPER($T{FIRST})<>"X",L{FIRST}="")'], fill=fill("FFF3CD")))
 
     def dv(ws, ref, **kw):
         d = DataValidation(allow_blank=True, showErrorMessage=True, **kw)
@@ -309,19 +352,21 @@ def build(path, demo=False):
        error="Pick a currency from the Rates sheet.")
     dv(ag, f"K{FIRST}:K{LAST_AGG}", type="date", operator="greaterThan", formula1="32874",
        errorTitle="As-at date", error="Enter a date.")
-    dv(ag, f"L{FIRST}:P{LAST_AGG}", type="decimal", operator="greaterThanOrEqual", formula1="0",
+    dv(ag, f"L{FIRST}:M{LAST_AGG}", type="decimal", operator="between", formula1="0", formula2="1",
+       errorTitle="Line %", error="Enter our line as a percentage between 0% and 100%, e.g. 7.5%.")
+    dv(ag, f"N{FIRST}:R{LAST_AGG}", type="decimal", operator="greaterThanOrEqual", formula1="0",
        errorTitle="Aggregate", error="Aggregates are amounts of zero or more.")
-    dv(ag, f"R{FIRST}:R{LAST_AGG}", type="list", formula1='"X"')
+    dv(ag, f"T{FIRST}:T{LAST_AGG}", type="list", formula1='"X"')
 
     if demo:
         for i, row in enumerate(DEMO_ROWS):
             r = FIRST + i
-            ced, ctry, zone, zname, yr, tt, cob, ccy, *amts = row
+            ced, ctry, zone, zname, yr, tt, cob, ccy, wl, sl, *amts = row
             vals = {"C": ced, "D": ctry, "E": zone or None, "F": zname or None, "G": yr, "H": tt, "I": cob,
-                    "J": ccy, "K": date(2026, 9, 30)}
+                    "J": ccy, "K": date(2026, 9, 30), "L": wl, "M": sl}
             for col, v in vals.items():
                 ag[f"{col}{r}"] = v
-            for col, v in zip("LMNOP", amts):
+            for col, v in zip("NOPQR", amts):
                 ag[f"{col}{r}"] = v
             ag[f"A{r}"] = "NEW - not yet pushed"
 
@@ -383,7 +428,7 @@ def build(path, demo=False):
     header(li, 5, ["Class of business", "Code"], 4)
     header(li, 5, ["Peril", "Meaning"], 7)
     header(li, 5, ["UW year filter"], 10)
-    widths(li, {"A": 24, "B": 20, "C": 3, "D": 24, "E": 9, "F": 3, "G": 9, "H": 32, "I": 3, "J": 14, "K": 3})
+    widths(li, {"A": 24, "B": 20, "C": 3, "D": 24, "E": 9, "F": 3, "G": 9, "H": 32, "I": 3, "J": 14, "K": 3, "L": 3, "M": 18, "N": 3, "O": 10})
     style_range(li, f"A{FIRST}:B{LAST_LIST}", font=blue, border=False)
     style_range(li, f"D{FIRST}:E{LAST_LIST}", font=blue, border=False)
     for i, (a, b) in enumerate(TREATY_TYPES):
@@ -396,90 +441,179 @@ def build(path, demo=False):
     for i, y in enumerate(range(2015, 2036)):
         li.cell(FIRST + 1 + i, 10, y).font = f(10)
     li.cell(4, 7, "Fixed - matches the five peril columns").font = f(8, True, INK_SOFT)
+    header(li, 5, ["Matrix basis"], 13)
+    header(li, 5, ["View by"], 15)
+    for i, b in enumerate(BASIS_LIST):
+        li.cell(FIRST + i, 13, b).font = f(10)
+    for i, b in enumerate(["Cedant", "Country"]):
+        li.cell(FIRST + i, 15, b).font = f(10)
     li.freeze_panes = "A6"
 
-    # ================= By Cedant / By Country ===================================
-    def summary_sheet(ws, kind):
-        is_ced = kind == "cedant"
-        src, last = ("Cedants", LAST_CED) if is_ced else ("Countries", LAST_CTRY)
-        key = "agg_Cedant" if is_ced else "agg_Country"
-        n = last - FIRST + 1
-        top, bot = FIRST + 1, FIRST + n          # data rows (row 6 = total)
-        title_bar(ws, 12, f"Aggregates by {kind} (USD)",
-                  f"USD at the latest rate on the Rates sheet. UW year filter is on the Dashboard. "
+    # ================= Basis sheets: 100% / written / signed ======================
+    N_ROWS = LAST_CED - FIRST + 1                     # 500 (covers 200 countries too)
+    TOP, BOT = FIRST + 1, FIRST + N_ROWS              # row 6 = total
+
+    def list_cols(ws, r, s, vw="$B$4"):
+        """A name, B home country / ISO2, C active / region - switched by the View-by cell."""
+        ws[f"A{r}"] = (f'=IF({vw}="Country",IF(Countries!A{s}="","",Countries!A{s}),'
+                       f'IF(Cedants!A{s}="","",Cedants!A{s}))')
+        ws[f"B{r}"] = (f'=IF($A{r}="","",IF({vw}="Country",Countries!B{s}&"",'
+                       f'IF(Cedants!B{s}="","",Cedants!B{s})))')
+        ws[f"C{r}"] = (f'=IF($A{r}="","",IF({vw}="Country",Countries!D{s}&"",'
+                       f'IF(Cedants!C{s}="","Y",Cedants!C{s})))')
+        ws[f"D{r}"] = (f'=IF($A{r}="","",IF({vw}="Country",COUNTIFS(agg_Country,$A{r},agg_UWYear,crit_UWYear),'
+                       f'COUNTIFS(agg_Cedant,$A{r},agg_UWYear,crit_UWYear)))')
+
+    def sumifs(col, r, mult="", vw="$B$4"):
+        src = rng(col)
+        return (f'=IF($A{r}="","",{mult}IF({vw}="Country",SUMIFS({src},agg_Country,$A{r},agg_UWYear,crit_UWYear),'
+                f'SUMIFS({src},agg_Cedant,$A{r},agg_UWYear,crit_UWYear)))')
+
+    def view_controls(ws, extra=""):
+        ws["A4"] = "View by"; ws["A4"].font = f(10, True); ws["A4"].alignment = Alignment(horizontal="right")
+        ws["B4"] = "Cedant"
+        ws["B4"].font = f(11, True, INPUT_BLUE); ws["B4"].fill = fill("FFFF00"); ws["B4"].border = BOX
+        ws["B4"].alignment = Alignment(horizontal="center")
+        dv(ws, "B4", type="list", formula1="lst_ViewBy")
+        ws["D4"] = '="UW year: "&sel_UWYear&"   (change on Dashboard)"' + extra
+        ws["D4"].font = f(9, True, TEAL)
+
+    def head_labels(ws, amount_labels, tail):
+        header(ws, 5, ["", "", "", "Rows"] + amount_labels + tail)
+        ws["A5"] = '=IF($B$4="Country","Country","Cedant")'
+        ws["B5"] = '=IF($B$4="Country","ISO2","Home country")'
+        ws["C5"] = '=IF($B$4="Country","Region","Active")'
+
+    def finish(ws, last_col, amount_cols, peak_cols, bar_col, bar_color):
+        style_range(ws, f"A{FIRST}:{last_col}{FIRST}", font=f(10, True, TOTAL_INK), bg=TOTAL_BG)
+        ws[f"A{FIRST}"] = "TOTAL"
+        ws[f"D{FIRST}"] = f"=SUM(D{TOP}:D{BOT})"
+        ws[f"D{FIRST}"].number_format = "0"
+        style_range(ws, f"A{TOP}:C{BOT}", font=f(10), border=False)
+        style_range(ws, f"D{TOP}:D{BOT}", font=f(10), number_format='0;-0;"-"', border=False)
+        for c in amount_cols + peak_cols:
+            style_range(ws, f"{c}{TOP}:{c}{BOT}", font=f(10), number_format=MONEY, border=False)
+            ws[f"{c}{FIRST}"].number_format = MONEY
+        ws.conditional_formatting.add(f"{bar_col}{TOP}:{bar_col}{BOT}", DataBarRule(
+            start_type="num", start_value=0, end_type="max", color=bar_color, showValue=True))
+        ws.conditional_formatting.add(f"A{TOP}:{last_col}{BOT}", FormulaRule(formula=["MOD(ROW(),2)=0"], fill=fill("F4F9FA")))
+        ws.freeze_panes = f"B{TOP}"
+
+    for ws, (title, desc, start) in zip(basis_ws, BASES):
+        cols = USD_COLS[start]
+        title_bar(ws, 12, f"{title} (USD)",
+                  f"Aggregates at {desc}, in USD at the latest rate on Rates. Switch View by between Cedant and Country. "
                   f"Peak = largest single-peril aggregate (perils are not added together).")
-        ws.cell(4, 1, '="UW year: "&sel_UWYear').font = f(9, True, TEAL)
-        b_lab = "Home country" if is_ced else "ISO2"
-        c_lab = "Active" if is_ced else "Region"
-        header(ws, 5, [kind.capitalize(), b_lab, c_lab, "Rows", "EQ", "WS", "Flood", "SRCC", "Others",
-                       "Peak peril agg", "Peak peril", "Rank"])
-        widths(ws, {"A": 34, "B": 20 if is_ced else 7, "C": 9 if is_ced else 13, "D": 7, "E": 16, "F": 16,
-                    "G": 16, "H": 16, "I": 16, "J": 17, "K": 10, "L": 7})
-        # total row
-        ws.cell(FIRST, 1, "TOTAL")
-        ws.cell(FIRST, 4, f"=SUM(D{top}:D{bot})")
+        view_controls(ws)
+        head_labels(ws, [p for p, _ in PERILS], ["Peak peril agg", "Peak peril", "Rank"])
+        widths(ws, {"A": 34, "B": 20, "C": 13, "D": 7, "E": 16, "F": 16, "G": 16, "H": 16, "I": 16,
+                    "J": 17, "K": 10, "L": 7})
         for col in "EFGHI":
-            ws[f"{col}{FIRST}"] = f"=SUM({col}{top}:{col}{bot})"
+            ws[f"{col}{FIRST}"] = f"=SUM({col}{TOP}:{col}{BOT})"
         ws[f"J{FIRST}"] = f"=MAX(E{FIRST}:I{FIRST})"
         ws[f"K{FIRST}"] = f'=IF(N(J{FIRST})=0,"",INDEX(lst_Perils,MATCH(J{FIRST},E{FIRST}:I{FIRST},0)))'
-        style_range(ws, f"A{FIRST}:L{FIRST}", font=f(10, True, TOTAL_INK), bg=TOTAL_BG)
-        for r in range(top, bot + 1):
-            s = r - 1   # source row on master sheet
-            ws[f"A{r}"] = f'=IF({src}!A{s}="","",{src}!A{s})'
-            if is_ced:
-                ws[f"B{r}"] = f'=IF(OR($A{r}="",Cedants!B{s}=""),"",Cedants!B{s})'
-                ws[f"C{r}"] = f'=IF($A{r}="","",IF(Cedants!C{s}="","Y",Cedants!C{s}))'
-            else:
-                ws[f"B{r}"] = f'=IF(OR($A{r}="",Countries!B{s}=""),"",Countries!B{s})'
-                ws[f"C{r}"] = f'=IF(OR($A{r}="",Countries!D{s}=""),"",Countries!D{s})'
-            ws[f"D{r}"] = f'=IF($A{r}="","",COUNTIFS({key},$A{r},agg_UWYear,crit_UWYear))'
-            for col, nm in zip("EFGHI", ["agg_EQ_USD", "agg_WS_USD", "agg_Flood_USD", "agg_SRCC_USD", "agg_Others_USD"]):
-                ws[f"{col}{r}"] = f'=IF($A{r}="","",SUMIFS({nm},{key},$A{r},agg_UWYear,crit_UWYear))'
+        for r in range(TOP, BOT + 1):
+            s = r - 1
+            list_cols(ws, r, s)
+            for k, col in enumerate("EFGHI"):
+                ws[f"{col}{r}"] = sumifs(cols[k], r)
             ws[f"J{r}"] = f'=IF($A{r}="","",MAX(E{r}:I{r}))'
             ws[f"K{r}"] = f'=IF(N(J{r})=0,"",INDEX(lst_Perils,MATCH(J{r},E{r}:I{r},0)))'
-            ws[f"L{r}"] = f'=IF(N(J{r})=0,"",RANK(J{r},$J${top}:$J${bot}))'
-        style_range(ws, f"A{top}:C{bot}", font=f(10), border=False)
-        style_range(ws, f"D{top}:D{bot}", font=f(10), number_format="0;-0;\"-\"", border=False)
-        style_range(ws, f"E{top}:J{bot}", font=f(10), number_format=MONEY, border=False)
-        style_range(ws, f"K{top}:L{bot}", font=f(10), align=Alignment(horizontal="center"), border=False)
-        ws[f"D{FIRST}"].number_format = "0"
-        for col in "EFGHIJ":
-            ws[f"{col}{FIRST}"].number_format = MONEY
-        ws.conditional_formatting.add(f"J{top}:J{bot}", DataBarRule(start_type="num", start_value=0, end_type="max",
-                                                                    color="7FB8A4", showValue=True))
-        ws.conditional_formatting.add(f"A{top}:L{bot}", FormulaRule(formula=[f"MOD(ROW(),2)=0"], fill=fill("F4F9FA")))
-        ws.freeze_panes = "B7"
-        return top, bot
+            ws[f"L{r}"] = f'=IF(N(J{r})=0,"",RANK(J{r},$J${TOP}:$J${BOT}))'
+        finish(ws, "L", list("EFGHI"), ["J"], "J", "7FB8A4")
+        style_range(ws, f"K{TOP}:L{BOT}", font=f(10), align=Alignment(horizontal="center"), border=False)
+        ws[f"K{FIRST}"].alignment = Alignment(horizontal="center")
 
-    ced_top, ced_bot = summary_sheet(byc, "cedant")
-    ctry_top, ctry_bot = summary_sheet(byk, "country")
+    # ================= Factor Applied ==============================================
+    title_bar(fac, 17, "Factor applied to written and signed share (USD)",
+              "Each written-share and signed-share aggregate multiplied by the factor in F4 (default 0.35%). "
+              "Same View by and UW year filter as the other share sheets.")
+    view_controls(fac)
+    fac["D4"] = "Factor"; fac["D4"].font = f(10, True); fac["D4"].alignment = Alignment(horizontal="right")
+    fac["F4"] = DEFAULT_FACTOR
+    fac["F4"].number_format = "0.00%"
+    fac["F4"].font = f(11, True, INPUT_BLUE); fac["F4"].fill = fill("FFFF00"); fac["F4"].border = BOX
+    fac["F4"].alignment = Alignment(horizontal="center")
+    fac["F4"].comment = Comment("Factor applied to written and signed share aggregates. "
+                                "Set by the user: 0.35%. Change it here; every figure on this sheet, "
+                                "the Dashboard and the Matrix follows.", "Aggregate Tracker")
+    dv(fac, "F4", type="decimal", operator="between", formula1="0", formula2="1",
+       errorTitle="Factor", error="Enter a percentage between 0% and 100%.")
+    fac["H4"] = '="UW year: "&sel_UWYear'; fac["H4"].font = f(9, True, TEAL)
+    head_labels(fac, [f"Written {p}" for p, _ in PERILS] + [f"Signed {p}" for p, _ in PERILS],
+                ["Peak written", "Peak signed", "Rank (signed)"])
+    fw = {"A": 34, "B": 20, "C": 13, "D": 7, "Q": 9}
+    for c in range(5, 17):
+        fw[L(c)] = 14
+    widths(fac, fw)
+    for c in range(5, 10):
+        fac.cell(5, c).fill = fill("2F6F8F")
+    for c in range(10, 15):
+        fac.cell(5, c).fill = fill(HEADER)
+    wcols, scols = list("EFGHI"), list("JKLMN")
+    for col in wcols + scols:
+        fac[f"{col}{FIRST}"] = f"=SUM({col}{TOP}:{col}{BOT})"
+    fac[f"O{FIRST}"] = f"=MAX(E{FIRST}:I{FIRST})"
+    fac[f"P{FIRST}"] = f"=MAX(J{FIRST}:N{FIRST})"
+    for r in range(TOP, BOT + 1):
+        s = r - 1
+        list_cols(fac, r, s)
+        for k in range(5):
+            fac[f"{wcols[k]}{r}"] = sumifs(USD_WRITTEN[k], r, mult="cfg_Factor*")
+            fac[f"{scols[k]}{r}"] = sumifs(USD_SIGNED[k], r, mult="cfg_Factor*")
+        fac[f"O{r}"] = f'=IF($A{r}="","",MAX(E{r}:I{r}))'
+        fac[f"P{r}"] = f'=IF($A{r}="","",MAX(J{r}:N{r}))'
+        fac[f"Q{r}"] = f'=IF(N(P{r})=0,"",RANK(P{r},$P${TOP}:$P${BOT}))'
+    finish(fac, "Q", wcols + scols, ["O", "P"], "P", "7FB8A4")
+    style_range(fac, f"Q{TOP}:Q{BOT}", font=f(10), align=Alignment(horizontal="center"), border=False)
+
+    # ================= Calc (hidden): signed share per cedant / country ============
+    calc.sheet_state = "hidden"
+    calc["A1"] = "Helper for the Dashboard 'largest' columns - signed share USD by cedant and by country."
+    header(calc, 5, ["Cedant"] + [p for p, _ in PERILS] + ["", "Country"] + [p for p, _ in PERILS])
+    for r in range(FIRST, LAST_CED + 1):
+        calc[f"A{r}"] = f'=IF(Cedants!A{r}="","",Cedants!A{r})'
+        for k, col in enumerate("BCDEF"):
+            calc[f"{col}{r}"] = f'=IF($A{r}="",0,SUMIFS({rng(USD_SIGNED[k])},agg_Cedant,$A{r},agg_UWYear,crit_UWYear))'
+    for r in range(FIRST, LAST_CTRY + 1):
+        calc[f"H{r}"] = f'=IF(Countries!A{r}="","",Countries!A{r})'
+        for k, col in enumerate("IJKLM"):
+            calc[f"{col}{r}"] = f'=IF($H{r}="",0,SUMIFS({rng(USD_SIGNED[k])},agg_Country,$H{r},agg_UWYear,crit_UWYear))'
 
     # ================= Matrix ===================================================
     MX_HDR, MX_TOP, MX_BOT = 7, 8, 207
     title_bar(mx, 23, "Cedant x country matrix (USD)",
-              "Pick a peril and change any country in row 7 (dropdowns). 'Other countries' = everything not shown.")
+              "Pick a basis and a peril, and change any country in row 7 (dropdowns). 'Other countries' = everything not shown.")
+    mx["B4"] = "Basis"; mx["B4"].font = f(10, True)
+    mx["C4"] = "Signed share"
     mx["B5"] = "Peril"; mx["B5"].font = f(10, True)
-    mx["C5"] = "EQ"; mx["C5"].font = f(11, True, INPUT_BLUE); mx["C5"].fill = fill("FFFF00"); mx["C5"].border = BOX
+    mx["C5"] = "EQ"
+    for c in ("C4", "C5"):
+        mx[c].font = f(11, True, INPUT_BLUE); mx[c].fill = fill("FFFF00"); mx[c].border = BOX
+    dv(mx, "C4", type="list", formula1="lst_Basis")
     dv(mx, "C5", type="list", formula1="lst_Perils")
+    mx["E4"] = '=C4&" - "&C5&IF(sel_MxBasis>3,"  (factor "&TEXT(cfg_Factor,"0.00%")&")","")'
+    mx["E4"].font = f(10, True, TEAL)
     mx["E5"] = '="UW year: "&sel_UWYear&"   (change on Dashboard)"'; mx["E5"].font = f(9, True, TEAL)
-    mx.cell(MX_HDR, 1, "Cedant")
     labels = ["Cedant"] + MATRIX_COUNTRIES + ["Other countries", "Total"]
     header(mx, MX_HDR, labels)
     for i in range(20):
         mx.cell(MX_HDR, 2 + i).fill = fill(TEAL)
     dv(mx, f"B{MX_HDR}:U{MX_HDR}", type="list", formula1="lst_Countries")
     mx.column_dimensions["A"].width = 32
+    mx.column_dimensions["C"].width = 16
     for c in range(2, 24):
-        mx.column_dimensions[L(c)].width = 13
+        if c != 3:
+            mx.column_dimensions[L(c)].width = 13
     mx.row_dimensions[MX_HDR].height = 42
     for r in range(MX_TOP, MX_BOT + 1):
         s = r - MX_TOP + FIRST
         mx[f"A{r}"] = f'=IF(Cedants!A{s}="","",Cedants!A{s})'
         for c in range(2, 22):
             cl = L(c)
-            mx[f"{cl}{r}"] = (f'=IF(OR($A{r}="",{cl}${MX_HDR}=""),"",SUMIFS(INDEX(agg_USD_block,0,sel_PerilIdx),'
+            mx[f"{cl}{r}"] = (f'=IF(OR($A{r}="",{cl}${MX_HDR}=""),"",sel_MxMult*SUMIFS(INDEX(agg_USD_block,0,sel_MxCol),'
                               f'agg_Cedant,$A{r},agg_Country,{cl}${MX_HDR},agg_UWYear,crit_UWYear))')
-        mx[f"W{r}"] = f'=IF($A{r}="","",SUMIFS(INDEX(agg_USD_block,0,sel_PerilIdx),agg_Cedant,$A{r},agg_UWYear,crit_UWYear))'
+        mx[f"W{r}"] = f'=IF($A{r}="","",sel_MxMult*SUMIFS(INDEX(agg_USD_block,0,sel_MxCol),agg_Cedant,$A{r},agg_UWYear,crit_UWYear))'
         mx[f"V{r}"] = f'=IF($A{r}="","",W{r}-SUM(B{r}:U{r}))'
     TOT = MX_BOT + 1
     mx.cell(TOT, 1, "TOTAL")
@@ -497,8 +631,8 @@ def build(path, demo=False):
 
     # ================= Dashboard ================================================
     title_bar(dash, 8, "Dashboard", "All figures in USD at the latest FX rate. Change the UW year filter here; "
-              "By Cedant, By Country and Matrix follow it.")
-    widths(dash, {"A": 3, "B": 34, "C": 20, "D": 32, "E": 20, "F": 32, "G": 20, "H": 3})
+              "every report sheet follows it.")
+    widths(dash, {"A": 3, "B": 36, "C": 19, "D": 40, "E": 19, "F": 30, "G": 19, "H": 3})
     dash["B5"] = "UW year filter"; dash["B5"].font = f(10, True)
     dash["C5"] = "All"
     dash["C5"].font = f(11, True, INPUT_BLUE); dash["C5"].fill = fill("FFFF00"); dash["C5"].border = BOX
@@ -506,24 +640,33 @@ def build(path, demo=False):
     dash["D5"] = "Pick All or a single underwriting year"; dash["D5"].font = f(9, italic=True, color=INK_SOFT)
     dv(dash, "C5", type="list", formula1="lst_UWYears")
 
-    kpis = [("Aggregate rows", "=COUNTIFS(agg_Cedant,\"<>\",agg_UWYear,crit_UWYear)"),
-            ("Cedants with aggregates", f"=COUNTIF('By Cedant'!$D${ced_top}:$D${ced_bot},\">0\")"),
-            ("Countries with aggregates", f"=COUNTIF('By Country'!$D${ctry_top}:$D${ctry_bot},\">0\")")]
+    ced_rng = f"Cedants!$A${FIRST}:$A${LAST_CED}"
+    ctry_rng = f"Countries!$A${FIRST}:$A${LAST_CTRY}"
+    kpis = [("Aggregate rows", '=COUNTIFS(agg_Cedant,"<>",agg_UWYear,crit_UWYear)', "#,##0"),
+            ("Cedants with aggregates",
+             f'=SUMPRODUCT(({ced_rng}<>"")*(COUNTIFS(agg_Cedant,{ced_rng},agg_UWYear,crit_UWYear)>0))', "#,##0"),
+            ("Countries with aggregates",
+             f'=SUMPRODUCT(({ctry_rng}<>"")*(COUNTIFS(agg_Country,{ctry_rng},agg_UWYear,crit_UWYear)>0))', "#,##0"),
+            ("Factor (set on Factor Applied)", "=cfg_Factor", "0.00%")]
     header(dash, 7, ["Portfolio", "Value"], 2)
-    for i, (lab, fx) in enumerate(kpis):
+    for i, (lab, fx, nf) in enumerate(kpis):
         r = 8 + i
         dash.cell(r, 2, lab); dash.cell(r, 3, fx)
         style_range(dash, f"B{r}:C{r}", font=f(10))
-        dash.cell(r, 3).number_format = "#,##0"
+        dash.cell(r, 3).number_format = nf
         dash.cell(r, 3).font = f(11, True)
 
+    live = '(agg_Cedant<>"")*(UPPER(agg_Delete)<>"X")'
     header(dash, 7, ["Data checks (all years)", "Rows"], 4)
     checks = [
-        ("Rows with no FX rate (excluded from USD)",
-         '=SUMPRODUCT((agg_Cedant<>"")*(UPPER(agg_Delete)<>"X")*(agg_Ccy<>"")*(agg_FX=""))'),
+        ("Rows with no FX rate (excluded from USD)", f'=SUMPRODUCT({live}*(agg_Ccy<>"")*(agg_FX=""))'),
+        ("Rows with no written line (written share = 0)", f'=SUMPRODUCT({live}*(agg_Written=""))'),
+        ("Rows with no signed line (signed share = 0)", f'=SUMPRODUCT({live}*(agg_Signed=""))'),
+        ("Rows with signed line above written line",
+         f'=SUMPRODUCT({live}*(agg_Signed<>"")*(agg_Written<>"")*(agg_Signed>agg_Written))'),
         ("Rows with a cedant/country not on the lists",
-         f'=SUMPRODUCT((agg_Cedant<>"")*(COUNTIF(Cedants!$A${FIRST}:$A${LAST_CED},agg_Cedant)=0))'
-         f'+SUMPRODUCT((agg_Country<>"")*(COUNTIF(Countries!$A${FIRST}:$A${LAST_CTRY},agg_Country)=0))'),
+         f'=SUMPRODUCT((agg_Cedant<>"")*(COUNTIF({ced_rng},agg_Cedant)=0))'
+         f'+SUMPRODUCT((agg_Country<>"")*(COUNTIF({ctry_rng},agg_Country)=0))'),
         ("Rows not OK in Access (new or error)", '=SUMPRODUCT((agg_Cedant<>"")*(agg_Status<>"OK"))'),
     ]
     for i, (lab, fx) in enumerate(checks):
@@ -532,43 +675,64 @@ def build(path, demo=False):
         style_range(dash, f"D{r}:E{r}", font=f(10))
         dash.cell(r, 5).number_format = "#,##0"
         dash.cell(r, 5).font = f(11, True)
-    dash.conditional_formatting.add("E8:E10", CellIsRule(operator="greaterThan", formula=["0"],
+    dash.conditional_formatting.add("E8:E13", CellIsRule(operator="greaterThan", formula=["0"],
                                     fill=fill("FFF3CD"), font=Font(name=FONT, bold=True, color="7A5B00")))
 
     header(dash, 7, ["Sync", ""], 6)
     dash["F8"] = "Last pull from Access"; dash["G8"] = "=IF(cfg_LastPull=\"\",\"never\",cfg_LastPull)"
     dash["F9"] = "Last push to Access"; dash["G9"] = "=IF(cfg_LastPush=\"\",\"never\",cfg_LastPush)"
     style_range(dash, "F8:G9", font=f(10), number_format=STAMP)
-    style_range(dash, "F10:G10", font=f(10))
 
-    header(dash, 13, ["Peril", "Aggregate (USD)", "Largest cedant", "Cedant agg (USD)", "Largest country",
-                      "Country agg (USD)"], 2)
+    PT = 16   # peril table header row
+    header(dash, PT, ["Peril", "100% (USD)", "Written share", "Signed share", "Written x factor",
+                      "Signed x factor"], 2)
+    dash.cell(PT - 1, 2, "Aggregates by peril and basis").font = f(12, True, TEAL)
     for i, (code, meaning) in enumerate(PERILS):
-        r = 14 + i
-        col = "EFGHI"[i]
-        cr = f"'By Cedant'!${col}${ced_top}:${col}${ced_bot}"
-        kr = f"'By Country'!${col}${ctry_top}:${col}${ctry_bot}"
+        r = PT + 1 + i
         dash.cell(r, 2, f"{code} - {meaning}")
-        dash.cell(r, 3, f"='By Cedant'!{col}{FIRST}")
-        dash.cell(r, 4, f"=IF(MAX({cr})=0,\"-\",INDEX('By Cedant'!$A${ced_top}:$A${ced_bot},MATCH(MAX({cr}),{cr},0)))")
-        dash.cell(r, 5, f"=MAX({cr})")
-        dash.cell(r, 6, f"=IF(MAX({kr})=0,\"-\",INDEX('By Country'!$A${ctry_top}:$A${ctry_bot},MATCH(MAX({kr}),{kr},0)))")
-        dash.cell(r, 7, f"=MAX({kr})")
-        style_range(dash, f"B{r}:G{r}", font=f(10))
-        for c in (3, 5, 7):
+        dash.cell(r, 3, f"=SUMIFS({rng(USD_100[i])},agg_UWYear,crit_UWYear)")
+        dash.cell(r, 4, f"=SUMIFS({rng(USD_WRITTEN[i])},agg_UWYear,crit_UWYear)")
+        dash.cell(r, 5, f"=SUMIFS({rng(USD_SIGNED[i])},agg_UWYear,crit_UWYear)")
+        dash.cell(r, 6, f"=D{r}*cfg_Factor")
+        dash.cell(r, 7, f"=E{r}*cfg_Factor")
+        style_range(dash, f"B{r}:G{r}", font=f(10), number_format=MONEY)
+        dash.cell(r, 5).font = f(10, True)
+    p1, p5 = PT + 1, PT + 5
+    rp = PT + 6
+    dash.cell(rp, 2, "Peak single-peril aggregate")
+    for c in "CDEFG":
+        dash[f"{c}{rp}"] = f"=MAX({c}{p1}:{c}{p5})"
+    style_range(dash, f"B{rp}:G{rp}", font=f(10, True, TOTAL_INK), bg=TOTAL_BG, number_format=MONEY)
+    dash.cell(rp + 1, 2, "Peak peril")
+    for c in "CDEFG":
+        dash[f"{c}{rp + 1}"] = f'=IF(N({c}{rp})=0,"-",INDEX(lst_Perils,MATCH({c}{rp},{c}{p1}:{c}{p5},0)))'
+    style_range(dash, f"B{rp + 1}:G{rp + 1}", font=f(10, True, TOTAL_INK), bg=TOTAL_BG,
+                align=Alignment(horizontal="right"))
+    dash[f"B{rp + 1}"].alignment = Alignment(horizontal="left")
+
+    LT = rp + 4
+    dash.cell(LT - 1, 2, "Largest exposures on our signed share").font = f(12, True, TEAL)
+    header(dash, LT, ["Peril", "Largest cedant", "Signed share (USD)", "Largest country", "Signed share (USD)"], 2)
+    dash.merge_cells(start_row=LT, start_column=6, end_row=LT, end_column=7)
+    for i, (code, meaning) in enumerate(PERILS):
+        r = LT + 1 + i
+        cc = f"Calc!${'BCDEF'[i]}${FIRST}:${'BCDEF'[i]}${LAST_CED}"
+        kc = f"Calc!${'IJKLM'[i]}${FIRST}:${'IJKLM'[i]}${LAST_CTRY}"
+        dash.cell(r, 2, f"{code} - {meaning}")
+        dash.cell(r, 3, f'=IF(MAX({cc})=0,"-",INDEX(Calc!$A${FIRST}:$A${LAST_CED},MATCH(MAX({cc}),{cc},0)))')
+        dash.cell(r, 4, f"=MAX({cc})")
+        dash.cell(r, 5, f'=IF(MAX({kc})=0,"-",INDEX(Calc!$H${FIRST}:$H${LAST_CTRY},MATCH(MAX({kc}),{kc},0)))')
+        dash.cell(r, 6, f"=MAX({kc})")
+        style_range(dash, f"B{r}:F{r}", font=f(10))
+        for c in (4, 6):
             dash.cell(r, c).number_format = MONEY
-        dash.cell(r, 3).font = f(10, True)
-    r = 19
-    dash.cell(r, 2, "Peak single-peril aggregate")
-    dash.cell(r, 3, f"='By Cedant'!J{FIRST}")
-    dash.cell(r, 4, f"=\"Peril: \"&'By Cedant'!K{FIRST}")
-    style_range(dash, f"B{r}:G{r}", font=f(10, True, TOTAL_INK), bg=TOTAL_BG)
-    dash.cell(r, 3).number_format = MONEY
-    dash["B21"] = ("Perils are tracked separately and never added together: the same sum insured is usually exposed "
-                   "to several perils, so the meaningful single figure is the peak peril.")
-    dash["B21"].font = f(9, italic=True, color=INK_SOFT)
-    dash.merge_cells("B21:G22")
-    dash["B21"].alignment = Alignment(wrap_text=True, vertical="top")
+    nr = LT + 7
+    dash[f"B{nr}"] = ("100% = the cedant's full aggregate. Written / signed share = 100% x our written / signed line on "
+                      "each row. Factor = share x the factor on Factor Applied. Perils are never added together: the "
+                      "same sum insured is usually exposed to several perils, so the single figure is the peak peril.")
+    dash[f"B{nr}"].font = f(9, italic=True, color=INK_SOFT)
+    dash.merge_cells(f"B{nr}:G{nr + 2}")
+    dash[f"B{nr}"].alignment = Alignment(wrap_text=True, vertical="top")
 
     # ================= Start ====================================================
     title_bar(st, 6, "Start", "Excel front end over an Access database. Excel = screens; Access = system of record.")
@@ -629,7 +793,7 @@ def build(path, demo=False):
             "Enter or edit aggregates on Aggregates (blue columns). To remove a saved row type X in Delete (X) - "
             "do not delete the Excel row.",
             "Push aggregates. Fix any rows marked ERROR in the Status column and push again.",
-            "Read the results on Dashboard, By Cedant, By Country and Matrix."]
+            "Read the results on Dashboard, 100% Share, Written Share, Signed Share, Factor Applied and Matrix."]
     for i, t in enumerate(flow):
         st.cell(30 + i, 2, f"{i + 1}."); st.cell(30 + i, 3, t)
         st.merge_cells(start_row=30 + i, start_column=3, end_row=30 + i, end_column=4)
@@ -637,39 +801,55 @@ def build(path, demo=False):
         st.cell(30 + i, 2).alignment = Alignment(horizontal="right")
 
     st["B36"] = "Example aggregate row"; st["B36"].font = f(12, True, TEAL)
-    ex_hdr = ["Cedant", "Country", "Zone ID", "UW year", "Treaty type", "Class", "Ccy", "EQ", "WS", "Flood", "SRCC", "Others"]
-    ex_val = ["Tawuniya", "Saudi Arabia", "SA-01", 2026, "Quota Share", "Property", "SAR",
-              450000000, 0, 120000000, 80000000, 0]
-    st["B37"] = "Column"; st["C37"] = "Example value"; st["D37"] = "Rule"
+    example = [
+        ("Cedant", "Tawuniya", "Must exist on Cedants"),
+        ("Country", "Saudi Arabia", "Must exist on Countries"),
+        ("Zone ID", "SA-01", "Optional - blank = ALL (country total)"),
+        ("UW year", 2026, "Whole year 1990-2100"),
+        ("Treaty type", "Quota Share", "Optional - blank = ALL"),
+        ("Class", "Property", "Optional - blank = ALL"),
+        ("Ccy", "SAR", "Must exist on Rates; amounts are in this currency"),
+        ("Written line %", 0.10, "Our written line on this treaty, 0-100%. Blank = written share shows 0"),
+        ("Signed line %", 0.08, "Our signed line, 0-100%, not above the written line. Blank until signed"),
+        ("EQ", 450000000, "100% aggregate exposed to earthquake, >= 0"),
+        ("WS", 0, "100% aggregate exposed to windstorm"),
+        ("Flood", 120000000, "100% aggregate exposed to flood"),
+        ("SRCC", 80000000, "100% aggregate exposed to SRCC"),
+        ("Others", 0, "Any other peril"),
+    ]
     header(st, 37, ["Column", "Example value", "Rule"], 2)
-    rules = ["Must exist on Cedants", "Must exist on Countries", "Optional - blank = ALL (country total)",
-             "Whole year 1990-2100", "Optional - blank = ALL", "Optional - blank = ALL",
-             "Must exist on Rates; amounts are in this currency", "Aggregate exposed to earthquake, >= 0",
-             "Aggregate exposed to windstorm", "Aggregate exposed to flood", "Aggregate exposed to SRCC",
-             "Any other peril"]
-    for i, (h, v, rule) in enumerate(zip(ex_hdr, ex_val, rules)):
+    for i, (h, v, rule) in enumerate(example):
         r = 38 + i
         st.cell(r, 2, h).font = f(10, True)
         c = st.cell(r, 3, v); c.font = f(10, color=INPUT_BLUE)
-        if isinstance(v, (int, float)) and i >= 7:
+        if h.endswith("%"):
+            c.number_format = PCT
+        elif isinstance(v, (int, float)) and i >= 9:
             c.number_format = MONEY
         c.alignment = Alignment(horizontal="left")
         st.cell(r, 4, rule).font = f(10)
         style_range(st, f"B{r}:D{r}")
-    st["B50"] = ("One row per cedant + country + zone + UW year + treaty type + class + currency. "
-                 "That combination must be unique (enforced in Access).")
-    st["B50"].font = f(9, italic=True, color=INK_SOFT)
+    r = 38 + len(example) + 1
+    st[f"B{r}"] = ("One row per cedant + country + zone + UW year + treaty type + class + currency (unique in Access). "
+                   "Signed share = 450m x 8% = 36m SAR; at the 0.35% factor = 126k SAR.")
+    st[f"B{r}"].font = f(9, italic=True, color=INK_SOFT)
 
-    st["B52"] = "Colour legend"; st["B52"].font = f(12, True, TEAL)
-    st["B53"] = "Blue text"; st["B53"].font = f(10, color=INPUT_BLUE); st["C53"] = "Input you type"
-    st["B54"] = "Yellow cell"; st["B54"].fill = fill("FFFF00"); st["C54"] = "Setting / filter"
-    st["B55"] = "Grey-blue cell"; st["B55"].fill = fill(CALC_BG); st["C55"] = "Formula - do not type"
-    st["B56"] = "Status = ERROR"; st["B56"].fill = fill("F8D7DA"); st["C56"] = "Row refused on push - read the message"
-    for r in range(53, 57):
-        st.cell(r, 3).font = f(10)
+    r += 2
+    st[f"B{r}"] = "Colour legend"; st[f"B{r}"].font = f(12, True, TEAL)
+    legend = [("Blue text", "Input you type", None, INPUT_BLUE),
+              ("Yellow cell", "Setting / filter", "FFFF00", None),
+              ("Grey-blue cell", "Formula - do not type", CALC_BG, None),
+              ("Status = ERROR", "Row refused on push - read the message", "F8D7DA", None)]
+    for i, (a, b, bg, fg) in enumerate(legend):
+        rr = r + 1 + i
+        st[f"B{rr}"] = a; st[f"C{rr}"] = b
+        st[f"B{rr}"].font = f(10, color=fg or INK); st[f"C{rr}"].font = f(10)
+        if bg:
+            st[f"B{rr}"].fill = fill(bg)
 
-    st["B58"] = "How this mirrors Universe"; st["B58"].font = f(12, True, TEAL)
-    header(st, 59, ["Universe", "Here", "What it does"], 2)
+    r += len(legend) + 2
+    st[f"B{r}"] = "How this mirrors Universe"; st[f"B{r}"].font = f(12, True, TEAL)
+    header(st, r + 1, ["Universe", "Here", "What it does"], 2)
     arch = [("client (React screens)", "Excel sheets + AggMacros.bas", "Entry grids, dashboards, buttons"),
             ("server/src/services, validation", "AggService.bas", "Validation, push/pull, transactions"),
             ("modules/*/repositories", "AggRepo.bas", "Every SQL statement"),
@@ -677,14 +857,15 @@ def build(path, demo=False):
             ("db/migrations + runMigrations.js", "AggMigrate.bas + schema_migrations", "Numbered forward-only schema changes"),
             ("startup/ensureReferenceData.js", "AggSeed.bas + Lists / Cedants sheets", "Predefined treaty types, classes, cedants"),
             ("contract_cresta_data", "cedant_aggregate", "Peril aggregates by country / CRESTA zone"),
+            ("written / signed line (signed <= written)", "written_line, signed_line", "Our share of each aggregate row"),
             ("ref_exchange_rate (rate_to_usd)", "ref_exchange_rate + vw_fx_latest", "Latest rate per currency"),
             ("db/optimisticLock.js", "row_version column", "Refuses saves over someone else's change"),
             ("audit_log", "audit_log", "Who changed what, when")]
     for i, row in enumerate(arch):
-        r = 60 + i
-        for j, v in enumerate(row):
-            st.cell(r, 2 + j, v).font = f(10)
-        style_range(st, f"B{r}:D{r}")
+        rr = r + 2 + i
+        for j2, v in enumerate(row):
+            st.cell(rr, 2 + j2, v).font = f(10)
+        style_range(st, f"B{rr}:D{rr}")
 
     wb.active = 0
     wb.save(path)
